@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package settle.account.v1;
+
+// AccountService manages accounts, holds (authorizations), and the double-entry ledger.
+// Follows the standard two-phase payment lifecycle: CreateHold -> CaptureHold (or ReleaseHold).
+service AccountService {
+  // Step 1: Place a hold on the source account (moves funds from available_balance to held_balance).
+  rpc CreateHold(CreateHoldRequest) returns (CreateHoldResponse);
+
+  // Step 2a (Success): Capture an active hold into an immutable double-entry ledger transaction.
+  rpc CaptureHold(CaptureHoldRequest) returns (CaptureHoldResponse);
+
+  // Step 2b (Compensation/Void): Release an active hold back to the source account's available_balance.
+  rpc ReleaseHold(ReleaseHoldRequest) returns (ReleaseHoldResponse);
+}
+
+message CreateHoldRequest {
+  string idempotency_key = 1;   // e.g. "{transfer_id}:hold"
+  string transfer_id = 2;       // Saga workflow ID from payment-orchestrator
+  string source_account_id = 3; // Account whose funds are being held
+  int64 amount = 4;             // In smallest currency unit (paise for INR). Never float/double.
+  string currency = 5;          // ISO 4217 currency code, e.g. "INR"
+}
+
+message CreateHoldResponse {
+  string hold_id = 1;
+  int64 available_balance = 2;  // Remaining spendable balance in smallest currency unit
+  int64 held_balance = 3;       // Total frozen balance in smallest currency unit
+}
+
+message CaptureHoldRequest {
+  string idempotency_key = 1;        // e.g. "{transfer_id}:capture"
+  string hold_id = 2;                // ID of the ACTIVE hold created by CreateHold
+  string destination_account_id = 3; // Account receiving the credit entry in the ledger
+}
+
+message CaptureHoldResponse {
+  string transaction_id = 1;         // ID of the resulting double-entry ledger transaction
+}
+
+message ReleaseHoldRequest {
+  string idempotency_key = 1;        // e.g. "{transfer_id}:release"
+  string hold_id = 2;                // ID of the ACTIVE hold to void/release
+  string reason = 3;                 // Audit reason, e.g. "RAIL_DECLINED", "RISK_DECLINED", "EXPIRED"
+}
+
+message ReleaseHoldResponse {
+  bool released = 1;
+  int64 available_balance = 2;       // Restored spendable balance after releasing the hold
+}

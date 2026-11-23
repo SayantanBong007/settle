@@ -1,0 +1,23 @@
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: java_package_prefix
+      value: dev.settle.proto
+    - file_option: java_multiple_files
+      value: true
+    - file_option: go_package_prefix
+      value: github.com/SayantanBong007/settle/services/payment-orchestrator/gen
+plugins:
+  # Go protobuf structs + gRPC client/server stubs
+  - remote: buf.build/protocolbuffers/go:v1.36.5
+    out: ../services/payment-orchestrator/gen
+    opt: paths=source_relative
+  - remote: buf.build/grpc/go:v1.5.1
+    out: ../services/payment-orchestrator/gen
+    opt: paths=source_relative
+  # Java protobuf builders + gRPC service stubs into account-service
+  - remote: buf.build/protocolbuffers/java:v29.3
+    out: ../services/account-service/src/main/java
+  - remote: buf.build/grpc/java:v1.70.0
+    out: ../services/account-service/src/main/java
