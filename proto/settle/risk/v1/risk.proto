@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package settle.risk.v1;
+
+// RiskService evaluates every transfer using a Radar-inspired deterministic rules scorer
+// (target latency budget p99 <= 25ms, score capped at 100), returning APPROVE, REVIEW, or DECLINE.
+service RiskService {
+  rpc CheckRisk(CheckRiskRequest) returns (CheckRiskResponse);
+}
+
+enum Decision {
+  DECISION_UNSPECIFIED = 0;
+  APPROVE = 1;
+  REVIEW = 2;
+  DECLINE = 3;
+}
+
+message CheckRiskRequest {
+  string transfer_id = 1;
+  string source_account_id = 2;
+  string destination_account_id = 3;
+  int64 amount = 4;        // In minor units (paise for INR)
+  string currency = 5;     // "INR"
+  string device_id = 6;    // Device identifier (hashed server-side before storage)
+  string ip_address = 7;   // Client IP address (hashed server-side before storage)
+}
+
+message CheckRiskResponse {
+  Decision decision = 1;           // APPROVE (0-39), REVIEW (40-79), or DECLINE (80-100)
+  int32 risk_score = 2;            // 0 to 100 (capped at 100)
+  repeated string fired_rules = 3; // Signals that contributed to the score
+  string review_case_id = 4;       // Populated when decision == REVIEW
+  string rules_version = 5;        // Version of the rule weights evaluated
+  bool degraded = 6;               // True if a feature source timed out during evaluation
+}

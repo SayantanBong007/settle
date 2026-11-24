@@ -2,50 +2,52 @@ syntax = "proto3";
 
 package settle.account.v1;
 
-// AccountService manages accounts, holds (authorizations), and the double-entry ledger.
-// Follows the standard two-phase payment lifecycle: CreateHold -> CaptureHold (or ReleaseHold).
+// AccountService manages user accounts, pending holds, and the double-entry ledger.
+// Lifecycle: CreateHold (status = PENDING) -> CompleteHold (status = COMPLETED) or CancelHold (status = CANCELLED).
 service AccountService {
-  // Step 1: Place a hold on the source account (moves funds from available_balance to held_balance).
+  // Step 1: Move funds from available_balance into pending_balance (status = PENDING).
   rpc CreateHold(CreateHoldRequest) returns (CreateHoldResponse);
 
-  // Step 2a (Success): Capture an active hold into an immutable double-entry ledger transaction.
-  rpc CaptureHold(CaptureHoldRequest) returns (CaptureHoldResponse);
+  // Step 2a (Bank Succeeded): Finalize the PENDING hold into the double-entry ledger (status = COMPLETED).
+  rpc CompleteHold(CompleteHoldRequest) returns (CompleteHoldResponse);
 
-  // Step 2b (Compensation/Void): Release an active hold back to the source account's available_balance.
-  rpc ReleaseHold(ReleaseHoldRequest) returns (ReleaseHoldResponse);
+  // Step 2b (Bank Failed): Cancel the PENDING hold and return funds to available_balance (status = CANCELLED).
+  rpc CancelHold(CancelHoldRequest) returns (CancelHoldResponse);
 }
 
 message CreateHoldRequest {
-  string idempotency_key = 1;   // e.g. "{transfer_id}:hold"
-  string transfer_id = 2;       // Saga workflow ID from payment-orchestrator
-  string source_account_id = 3; // Account whose funds are being held
-  int64 amount = 4;             // In smallest currency unit (paise for INR). Never float/double.
-  string currency = 5;          // ISO 4217 currency code, e.g. "INR"
+  string idempotency_key = 1;        // e.g. "{transfer_id}:hold"
+  string transfer_id = 2;            // Transfer ID from payment-orchestrator
+  string source_account_id = 3;      // Sender's account ID
+  int64 amount = 4;                  // Amount in minor units (paise for INR). Always int64, never double.
+  string currency = 5;               // "INR"
+  string destination_account_id = 6; // Bound at hold creation so capture cannot redirect funds to a different account
 }
 
 message CreateHoldResponse {
   string hold_id = 1;
-  int64 available_balance = 2;  // Remaining spendable balance in smallest currency unit
-  int64 held_balance = 3;       // Total frozen balance in smallest currency unit
+  int64 available_balance = 2;       // Spendable balance remaining
+  int64 pending_balance = 3;         // In-flight balance currently locked in PENDING holds
 }
 
-message CaptureHoldRequest {
-  string idempotency_key = 1;        // e.g. "{transfer_id}:capture"
-  string hold_id = 2;                // ID of the ACTIVE hold created by CreateHold
-  string destination_account_id = 3; // Account receiving the credit entry in the ledger
+message CompleteHoldRequest {
+  string idempotency_key = 1;        // e.g. "{transfer_id}:complete"
+  string hold_id = 2;                // ID of the PENDING hold to complete
+  string destination_account_id = 3; // Optional/verified against the hold's bound destination_account_id
 }
 
-message CaptureHoldResponse {
-  string transaction_id = 1;         // ID of the resulting double-entry ledger transaction
+message CompleteHoldResponse {
+  string transfer_id = 1;
+  string status = 2;                 // "COMPLETED"
 }
 
-message ReleaseHoldRequest {
-  string idempotency_key = 1;        // e.g. "{transfer_id}:release"
-  string hold_id = 2;                // ID of the ACTIVE hold to void/release
-  string reason = 3;                 // Audit reason, e.g. "RAIL_DECLINED", "RISK_DECLINED", "EXPIRED"
+message CancelHoldRequest {
+  string idempotency_key = 1;        // e.g. "{transfer_id}:cancel"
+  string hold_id = 2;                // ID of the PENDING hold to cancel
+  string cancel_reason = 3;          // e.g. "BANK_FAILED", "FRAUD_DECLINED", "EXPIRED"
 }
 
-message ReleaseHoldResponse {
-  bool released = 1;
-  int64 available_balance = 2;       // Restored spendable balance after releasing the hold
+message CancelHoldResponse {
+  bool cancelled = 1;
+  int64 available_balance = 2;       // Restored spendable balance after cancelling the hold
 }

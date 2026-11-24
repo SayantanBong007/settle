@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Coordinates of the parent itself -->
+    <groupId>dev.settle</groupId>
+    <artifactId>settle-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <!-- pom = produces no jar; only holds config for the children -->
+    <packaging>pom</packaging>
+
+    <!-- AGGREGATION: "build these together". Parent points DOWN. -->
+    <modules>
+        <module>services/account-service</module>
+    </modules>
+
+    <properties>
+        <!-- Compile for Java 21 even though the installed JDK is 24 -->
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <spring-boot.version>4.1.2</spring-boot.version>
+        <grpc.version>1.70.0</grpc.version>
+        <protobuf.version>4.29.3</protobuf.version>
+    </properties>
+
+    <!-- THE MENU: versions only. Puts nothing on any classpath. -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- Import Spring Boot's BOM: ~300 library versions tested together -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Import gRPC BOM so all gRPC jars match the version buf generated -->
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-bom</artifactId>
+                <version>${grpc.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuf.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- THE ORDER FOR EVERYONE: forced onto every child. Keep this tiny. -->
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <!-- Same "menu" idea, but for plugins -->
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                    <executions>
+                        <execution>
+                            <!-- Binds the repackage goal to the package phase: makes the runnable fat jar -->
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

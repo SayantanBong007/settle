@@ -1,0 +1,74 @@
+# Local infrastructure for Settle. Start everything with:
+#   docker compose -f deploy/docker-compose.yml up -d
+# Containers reach each other by service name (postgres, kafka, redis) on the
+# default network compose creates. Your host reaches them via the mapped ports.
+
+name: settle
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}          # values come from deploy/.env (gitignored)
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"                            # host:container
+    volumes:
+      - pgdata:/var/lib/postgresql
+      # Scripts here run once, only when the data directory is empty
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:4.3.2
+    environment:
+      # KRaft mode: this one node is both broker and controller, no ZooKeeper
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw        # must be a base64-encoded UUID (22 chars)
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Two client listeners: containers use kafka:9092, your host uses localhost:29092
+      KAFKA_LISTENERS: INTERNAL://:9092,EXTERNAL://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Single broker, so internal topics can't have more than 1 replica
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    ports:
+      - "29092:29092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null"]
+      interval: 10s
+      retries: 10
+
+  redis:
+    image: redis:8.10-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8081:8080"
+  kafka-ui:
+    image: docker.redpanda.com/redpandadata/console:latest
+    environment:
+      KAFKA_BROKERS: kafka:9092
+    ports:
+      - "8082:8080"
+  redis-ui:
+    image: redis/redisinsight:latest
+    ports:
+      - "5540:5540"
+volumes:
+  pgdata:
+    

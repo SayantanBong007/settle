@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  secrets:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  proto:
+    name: Protobuf Lint & Breaking Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: bufbuild/buf-setup-action@v1
+      - name: Lint proto contracts
+        run: buf lint proto
+      - name: Check for breaking wire changes against main
+        if: github.event_name == 'pull_request'
+        run: buf breaking proto --against ".git#branch=origin/main,subdir=proto"
+
+  java:
+    name: Java Services (Maven)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bufbuild/buf-setup-action@v1
+      - name: Generate protobuf stubs
+        run: buf generate proto
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Build and test all Java modules
+        run: mvn -B test
+
+  go:
+    name: Go Orchestrator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bufbuild/buf-setup-action@v1
+      - name: Generate protobuf stubs
+        run: buf generate proto
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/payment-orchestrator/go.mod
+          cache-dependency-path: services/payment-orchestrator/go.sum
+      - name: Verify build and run tests with race detector
+        working-directory: services/payment-orchestrator
+        run: |
+          go build ./...
+          go test -race ./...

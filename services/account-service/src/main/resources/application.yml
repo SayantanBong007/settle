@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: account-service
+  threads:
+    virtual:
+      enabled: true # Java 21 virtual threads: blocking DB/gRPC calls don't pin OS threads
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/accounts
+    username: ${POSTGRES_USER:settle}
+    password: ${POSTGRES_PASSWORD:change-me}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Never let Hibernate auto-create tables in production! Flyway owns the schema;
+      # "validate" makes Hibernate verify on startup that Java @Entity classes match the SQL tables.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+settle:
+  grpc:
+    port: 9090
